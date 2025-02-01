@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// 0x950Ed51EE6A2D74Ff23e69090664a8f109006a1d
+// 0x06c2D07951Fc7321a2CC51099347E6660E453C21
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -75,18 +75,9 @@ contract NFTGenerator is ERC721, Ownable {
         });
     }
 
-    function buyPetFood(uint256 petFoodId, uint256 amount) public payable {
+    function buyPetFood(uint256 petFoodId, uint256 amount) public {
         require(petFoods[petFoodId].id != 0, "Pet food does not exist");
-        uint256 totalCost = petFoods[petFoodId].price * amount;
-        require(msg.value >= totalCost, "Insufficient payment");
-
         userPetFoodBalance[msg.sender][petFoodId] += amount;
-
-        uint256 refundAmount = msg.value - totalCost;
-        if (refundAmount > 0) {
-            (bool success, ) = msg.sender.call{value: refundAmount}("");
-            require(success, "Refund failed");
-        }
     }
 
     function feedPet(uint256 tokenId, uint256 petFoodId) public {
@@ -177,5 +168,15 @@ contract NFTGenerator is ERC721, Ownable {
         }
 
         return (userPetFoods, amounts);
+    }
+
+    function getPetFoods() public view returns (PetFood[] memory) {
+        PetFood[] memory allPetFoods = new PetFood[](petFoodCounter);
+
+        for (uint256 i = 1; i <= petFoodCounter; i++) {
+            allPetFoods[i - 1] = petFoods[i];
+        }
+
+        return allPetFoods;
     }
 }
