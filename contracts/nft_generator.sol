@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// 0x375Aa393eE3029412B28f7B4915f5f5bcfC5d7CA
+// 0x950Ed51EE6A2D74Ff23e69090664a8f109006a1d
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -92,7 +92,6 @@ contract NFTGenerator is ERC721, Ownable {
     function feedPet(uint256 tokenId, uint256 petFoodId) public {
         require(ownerOf(tokenId) == msg.sender, "Not the owner");
         require(userPetFoodBalance[msg.sender][petFoodId] > 0, "No pet food left");
-        // require(_exists(tokenId), "NFT does not exist");
 
         userPetFoodBalance[msg.sender][petFoodId]--;
 
@@ -105,7 +104,6 @@ contract NFTGenerator is ERC721, Ownable {
 
     function increaseXP(uint256 tokenId, uint256 amount) public {
         require(ownerOf(tokenId) == msg.sender, "Not the owner");
-        // require(_exists(tokenId), "NFT does not exist");
 
         NFT storage nft = nfts[tokenId];
         nft.xP += amount;
@@ -118,12 +116,18 @@ contract NFTGenerator is ERC721, Ownable {
 
     function updateNFTStats(uint256 tokenId, uint256 level, uint256 strength, uint256 intelligence) public {
         require(ownerOf(tokenId) == msg.sender, "Not the owner");
-        // require(_exists(tokenId), "NFT does not exist");
 
         NFT storage nft = nfts[tokenId];
         nft.level += level;
         nft.strength += strength;
         nft.intelligence += intelligence;
+    }
+
+    function updateImageURI(uint256 tokenId, string memory newImageLink) public {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner");
+
+        NFT storage nft = nfts[tokenId];
+        nft.imageLink = newImageLink;
     }
 
     function withdraw() external onlyOwner {
@@ -139,7 +143,6 @@ contract NFTGenerator is ERC721, Ownable {
     }
 
     function getNFTDetails(uint256 tokenId) public view returns (NFT memory) {
-        // require(_exists(tokenId), "NFT does not exist");
         return nfts[tokenId];
     }
 
