@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-//  Base sepolia address: 0xf987EE4e482ddBD4fB60Eb2F4213e7A530480B0C
-pragma solidity ^0.8.0;
+// 0x375Aa393eE3029412B28f7B4915f5f5bcfC5d7CA
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract NFTGenerator is ERC721 {
+contract NFTGenerator is ERC721, Ownable {
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
 
@@ -15,12 +16,24 @@ contract NFTGenerator is ERC721 {
         uint256 strength;
         uint256 intelligence;
         string imageLink;
+        uint256 xP;
+    }
+
+    struct PetFood {
+        uint256 id;
+        string name;
+        uint256 strengthBoost;
+        uint256 intelligenceBoost;
+        uint256 price;
     }
 
     mapping(uint256 => NFT) public nfts;
     mapping(address => uint256[]) public userNFTs;
+    mapping(uint256 => PetFood) public petFoods;
+    mapping(address => mapping(uint256 => uint256)) public userPetFoodBalance; // user => petFoodId => amount
+    uint256 public petFoodCounter;
 
-    constructor() ERC721("NFTGenerator", "NFTG") {}
+    constructor() ERC721("NFTGenerator", "NFTG") Ownable(msg.sender) {}
 
     function mintNFT(
         string memory name,
@@ -31,7 +44,6 @@ contract NFTGenerator is ERC721 {
     ) public returns (uint256) {
         _tokenIds.increment();
         uint256 newTokenId = _tokenIds.current();
-
         _mint(msg.sender, newTokenId);
 
         nfts[newTokenId] = NFT({
@@ -39,45 +51,87 @@ contract NFTGenerator is ERC721 {
             level: level,
             strength: strength,
             intelligence: intelligence,
-            imageLink: imageLink
+            imageLink: imageLink,
+            xP: 0
         });
 
         userNFTs[msg.sender].push(newTokenId);
-
         return newTokenId;
     }
 
-    function incrementLevel(uint256 tokenId, uint256 incrementValue) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this NFT");
-        nfts[tokenId].level += incrementValue;
+    function addPetFood(
+        string memory name,
+        uint256 strengthBoost,
+        uint256 intelligenceBoost,
+        uint256 price
+    ) public onlyOwner {
+        petFoodCounter++;
+        petFoods[petFoodCounter] = PetFood({
+            id: petFoodCounter,
+            name: name,
+            strengthBoost: strengthBoost,
+            intelligenceBoost: intelligenceBoost,
+            price: price
+        });
     }
 
-    function decrementLevel(uint256 tokenId, uint256 decrementValue) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this NFT");
-        require(nfts[tokenId].level >= decrementValue, "Level cannot be negative");
-        nfts[tokenId].level -= decrementValue;
+    function buyPetFood(uint256 petFoodId, uint256 amount) public payable {
+        require(petFoods[petFoodId].id != 0, "Pet food does not exist");
+        uint256 totalCost = petFoods[petFoodId].price * amount;
+        require(msg.value >= totalCost, "Insufficient payment");
+
+        userPetFoodBalance[msg.sender][petFoodId] += amount;
+
+        uint256 refundAmount = msg.value - totalCost;
+        if (refundAmount > 0) {
+            (bool success, ) = msg.sender.call{value: refundAmount}("");
+            require(success, "Refund failed");
+        }
     }
 
-    function incrementStrength(uint256 tokenId, uint256 incrementValue) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this NFT");
-        nfts[tokenId].strength += incrementValue;
+    function feedPet(uint256 tokenId, uint256 petFoodId) public {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner");
+        require(userPetFoodBalance[msg.sender][petFoodId] > 0, "No pet food left");
+        // require(_exists(tokenId), "NFT does not exist");
+
+        userPetFoodBalance[msg.sender][petFoodId]--;
+
+        NFT storage nft = nfts[tokenId];
+        PetFood storage food = petFoods[petFoodId];
+
+        nft.strength += food.strengthBoost;
+        nft.intelligence += food.intelligenceBoost;
     }
 
-    function decrementStrength(uint256 tokenId, uint256 decrementValue) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this NFT");
-        require(nfts[tokenId].strength >= decrementValue, "Strength cannot be negative");
-        nfts[tokenId].strength -= decrementValue;
+    function increaseXP(uint256 tokenId, uint256 amount) public {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner");
+        // require(_exists(tokenId), "NFT does not exist");
+
+        NFT storage nft = nfts[tokenId];
+        nft.xP += amount;
+
+        while (nft.xP >= 100) {
+            nft.xP -= 100;
+            nft.level++;
+        }
     }
 
-    function incrementIntelligence(uint256 tokenId, uint256 incrementValue) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this NFT");
-        nfts[tokenId].intelligence += incrementValue;
+    function updateNFTStats(uint256 tokenId, uint256 level, uint256 strength, uint256 intelligence) public {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner");
+        // require(_exists(tokenId), "NFT does not exist");
+
+        NFT storage nft = nfts[tokenId];
+        nft.level += level;
+        nft.strength += strength;
+        nft.intelligence += intelligence;
     }
 
-    function decrementIntelligence(uint256 tokenId, uint256 decrementValue) public {
-        require(ownerOf(tokenId) == msg.sender, "You are not the owner of this NFT");
-        require(nfts[tokenId].intelligence >= decrementValue, "Intelligence cannot be negative");
-        nfts[tokenId].intelligence -= decrementValue;
+    function withdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No funds to withdraw");
+
+        (bool success, ) = owner().call{value: balance}("");
+        require(success, "Withdraw failed");
     }
 
     function getUserNFTs(address user) public view returns (uint256[] memory) {
@@ -85,6 +139,40 @@ contract NFTGenerator is ERC721 {
     }
 
     function getNFTDetails(uint256 tokenId) public view returns (NFT memory) {
+        // require(_exists(tokenId), "NFT does not exist");
         return nfts[tokenId];
+    }
+
+    function getPetFoodDetails(uint256 petFoodId) public view returns (PetFood memory) {
+        require(petFoods[petFoodId].id != 0, "Pet food does not exist");
+        return petFoods[petFoodId];
+    }
+
+    function getUserPetFoodBalance(address user, uint256 petFoodId) public view returns (uint256) {
+        return userPetFoodBalance[user][petFoodId];
+    }
+
+    function getUserPetFoodDetails(address user) public view returns (PetFood[] memory, uint256[] memory) {
+        uint256 userPetFoodCount = 0;
+
+        for (uint256 i = 1; i <= petFoodCounter; i++) {
+            if (userPetFoodBalance[user][i] > 0) {
+                userPetFoodCount++;
+            }
+        }
+
+        PetFood[] memory userPetFoods = new PetFood[](userPetFoodCount);
+        uint256[] memory amounts = new uint256[](userPetFoodCount);
+        uint256 index = 0;
+
+        for (uint256 i = 1; i <= petFoodCounter; i++) {
+            if (userPetFoodBalance[user][i] > 0) {
+                userPetFoods[index] = petFoods[i];
+                amounts[index] = userPetFoodBalance[user][i];
+                index++;
+            }
+        }
+
+        return (userPetFoods, amounts);
     }
 }
